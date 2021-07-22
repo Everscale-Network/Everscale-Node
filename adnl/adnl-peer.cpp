@@ -264,7 +264,7 @@ void AdnlPeerPairImpl::send_messages_in(std::vector<OutboundAdnlMessage> message
     do {
       size_t s = (channel_ready_ ? channel_packet_header_max_size() : packet_header_max_size());
       if (first) {
-        s += 2 * addr_list_max_size();
+        s += 2 * static_cast<size_t>(addr_list_max_size());
       }
 
       AdnlPacket packet;
@@ -342,7 +342,7 @@ void AdnlPeerPairImpl::send_messages_in(std::vector<OutboundAdnlMessage> message
                               (first || s + addr_list_max_size() <= AdnlNetworkManager::get_mtu())
                                   ? peer_recv_addr_list_version_
                                   : 0x7fffffff,
-                              (first || s + 2 * addr_list_max_size() <= AdnlNetworkManager::get_mtu())
+                              (first || s + 2 * static_cast<size_t>(addr_list_max_size()) <= AdnlNetworkManager::get_mtu())
                                   ? peer_recv_priority_addr_list_version_
                                   : 0x7fffffff,
                               std::move(P));
