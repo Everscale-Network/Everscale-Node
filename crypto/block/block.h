@@ -509,12 +509,14 @@ struct DiscountedCounter {
     return valid;
   }
   bool invalidate() {
-    return (valid = false);
+    valid = false;
+    return valid;
   }
   bool set_zero() {
     last_updated = 0;
     total = cnt2048 = cnt65536 = 0;
-    return (valid = true);
+    valid = true;
+    return valid;
   }
   bool is_zero() const {
     return !total;
@@ -646,7 +648,8 @@ class MtCarloComputeShare {
 
  private:
   bool set_error() {
-    return ok = false;
+    ok = false;
+    return ok;
   }
   bool compute();
   void gen_vset();
