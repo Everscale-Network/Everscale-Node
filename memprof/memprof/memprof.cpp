@@ -21,7 +21,7 @@
 
 #include "td/utils/port/platform.h"
 
-#if (TD_DARWIN || TD_LINUX) && defined(USE_MEMPROF)
+#if (TD_DARWIN || TD_LINUX || TD_FREEBSD) && defined(USE_MEMPROF)
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -47,7 +47,7 @@ double get_fast_backtrace_success_rate() {
 }
 #else
 
-#if TD_LINUX
+#if TD_LINUX || TD_FREEBSD || TD_FREEBSD
 extern void *__libc_stack_end;
 #endif
 

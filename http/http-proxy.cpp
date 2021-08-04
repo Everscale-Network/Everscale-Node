@@ -35,7 +35,7 @@
 #include <algorithm>
 #include <list>
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 
@@ -280,14 +280,14 @@ int main(int argc, char *argv[]) {
   });
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
     td::set_signal_handler(td::SignalType::HangUp, [](int sig) {
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
       close(0);
       setsid();
 #endif
     }).ensure();
     return td::Status::OK();
   });
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
   p.add_option('l', "logname", "log to file", [&](td::Slice fname) {
     logger_ = td::FileLog::create(fname.str()).move_as_ok();
     td::log_interface = logger_.get();

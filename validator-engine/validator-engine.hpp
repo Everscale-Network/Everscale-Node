@@ -241,7 +241,7 @@ class ValidatorEngine : public td::actor::Actor {
     keys_[key.compute_short_id()] = key;
   }
   void start_up() override;
-  void got_result();
+  void got_result(td::uint32 idx, bool result);
   ValidatorEngine() {
   }
 

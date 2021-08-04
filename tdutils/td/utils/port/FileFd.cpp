@@ -149,7 +149,7 @@ Result<FileFd> FileFd::open(CSlice filepath, int32 flags, int32 mode) {
     native_flags |= O_APPEND;
   }
 
-#if TD_LINUX
+#if TD_LINUX || TD_FREEBSD
   if (flags & Direct) {
     native_flags |= O_DIRECT;
   }

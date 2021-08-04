@@ -61,7 +61,7 @@
 
 using namespace td;
 
-#if TD_LINUX || TD_DARWIN
+#if TD_LINUX || TD_DARWIN || TD_FREEBSD
 TEST(Misc, update_atime_saves_mtime) {
   SET_VERBOSITY_LEVEL(VERBOSITY_NAME(ERROR));
   std::string name = "test_file";

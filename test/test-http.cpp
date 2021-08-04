@@ -37,7 +37,7 @@
 #include "common/errorlog.h"
 #include "http/http.h"
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 #include <iostream>

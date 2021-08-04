@@ -44,7 +44,7 @@
 #include "adnl-received-mask.h"
 #include <map>
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 
@@ -317,7 +317,7 @@ int main(int argc, char *argv[]) {
     return td::Status::OK();
   });
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
     close(0);
     setsid();
 #endif

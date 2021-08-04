@@ -55,7 +55,7 @@
 
 #include "dht/dht.hpp"
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 #include <algorithm>
@@ -2677,6 +2677,8 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_addContro
   check_key(id, std::move(P));
 }
 
+// =====================================================================================================================
+// -c "getvalidators"
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getValidatorKeys &query, td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
   if (!(perm & ValidatorEnginePermissions::vep_modify)) {
@@ -2713,7 +2715,9 @@ void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_getValida
 
   auto b = ton::create_tl_object<ton::ton_api::engine_validator_validatorKeys>(std::move(result));
   promise.set_value(ton::serialize_tl_object(std::move(b), true));
-}
+} // engine_validator_getValidatorKeys
+// =====================================================================================================================
+
 
 void ValidatorEngine::run_control_query(ton::ton_api::engine_validator_delAdnlId &query, td::BufferSlice data,
                                         ton::PublicKeyHash src, td::uint32 perm, td::Promise<td::BufferSlice> promise) {
@@ -3303,18 +3307,31 @@ void dump_stats() {
   dump_memory_stats();
   LOG(WARNING) << td::NamedThreadSafeCounter::get_default();
 }
-
+// ############################################################################################
+// ########################### Start Validator Engine #########################################
+// ############################################################################################
 int main(int argc, char *argv[]) {
   SET_VERBOSITY_LEVEL(verbosity_INFO);
 
+  #ifndef BUILD_REVISION
+  #define BUILD_REVISION "Unknown"
+  #endif
+
+  #ifndef BUILD_DATE
+  #define BUILD_DATE __DATE__ __TIME__
+  #endif
+
   LOG(INFO) << "\n"
             << "BUILD_REVISION: " << BUILD_REVISION << "\n"
-            << "BUILD_DATE: " << BUILD_DATE << "\n";
+            << "BUILD_DATE: " << BUILD_DATE << "\n"
+            << "BLOCK SUPPORTED VERSION: " << BLK_SUPPORTED_VER << "\n"; // BLK_SUPPORTED_VER in common.h
 
   td::set_default_failure_signal_handler().ensure();
 
   td::actor::ActorOwn<ValidatorEngine> x;
   td::unique_ptr<td::LogInterface> logger_;
+  td::unique_ptr<td::LogInterface> loggerX_;
+
   SCOPE_EXIT {
     td::log_interface = td::default_log_interface;
   };
@@ -3324,12 +3341,9 @@ int main(int argc, char *argv[]) {
   std::vector<std::function<void()>> acts;
 
   td::OptionsParser p;
+
   p.set_description("validator or full node for TON network");
-  p.add_option('v', "verbosity", "set verbosity level", [&](td::Slice arg) {
-    int v = VERBOSITY_NAME(FATAL) + (td::to_integer<int>(arg));
-    SET_VERBOSITY_LEVEL(v);
-    return td::Status::OK();
-  });
+
   p.add_option('h', "help", "prints_help", [&]() {
     char b[10240];
     td::StringBuilder sb(td::MutableSlice{b, 10000});
@@ -3338,84 +3352,113 @@ int main(int argc, char *argv[]) {
     std::exit(2);
     return td::Status::OK();
   });
+
   p.add_option('C', "global-config", "file to read global config", [&](td::Slice fname) {
     acts.push_back(
         [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_global_config, fname); });
     return td::Status::OK();
   });
+
   p.add_option('c', "local-config", "file to read local config", [&](td::Slice fname) {
     acts.push_back(
         [&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_local_config, fname); });
     return td::Status::OK();
   });
+
   p.add_option('I', "ip", "ip:port of instance", [&](td::Slice arg) {
     td::IPAddress addr;
     TRY_STATUS(addr.init_host_port(arg.str()));
     acts.push_back([&x, addr]() { td::actor::send_closure(x, &ValidatorEngine::add_ip, addr); });
     return td::Status::OK();
   });
+
   p.add_option('D', "db", "root for dbs", [&](td::Slice fname) {
     acts.push_back([&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_db_root, fname); });
     return td::Status::OK();
   });
+
   p.add_option('f', "fift-dir", "directory with fift scripts", [&](td::Slice fname) {
     acts.push_back([&x, fname = fname.str()]() { td::actor::send_closure(x, &ValidatorEngine::set_fift_dir, fname); });
     return td::Status::OK();
   });
+
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
     close(0);
     setsid();
 #endif
     td::set_signal_handler(td::SignalType::HangUp, force_rotate_logs).ensure();
     return td::Status::OK();
   });
+
+  p.add_option('v', "verbosity", "set verbosity level; default=3 (WARNING)", [&](td::Slice arg) {
+    int v = VERBOSITY_NAME(FATAL) + (td::to_integer<int>(arg));
+    SET_VERBOSITY_LEVEL(v);
+    return td::Status::OK();
+  });
+
   p.add_option('l', "logname", "log to file", [&](td::Slice fname) {
     logger_ = td::TsFileLog::create(fname.str()).move_as_ok();
     td::log_interface = logger_.get();
     return td::Status::OK();
   });
+
+  // Log Validator Monitoring
+  p.add_option('x', "vmlogname", "validator monitoring log to file", [&](td::Slice fname) {
+    loggerX_ = td::TsFileLog::create(fname.str()).move_as_ok();
+    td::Xlog_interface = loggerX_.get();
+    return td::Status::OK();
+  });
+
   p.add_option('s', "state-ttl", "state will be gc'd after this time (in seconds) default=3600", [&](td::Slice fname) {
     auto v = td::to_double(fname);
     acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_state_ttl, v); });
     return td::Status::OK();
   });
+
   p.add_option('b', "block-ttl", "blocks will be gc'd after this time (in seconds) default=7*86400",
                [&](td::Slice fname) {
                  auto v = td::to_double(fname);
                  acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_block_ttl, v); });
                  return td::Status::OK();
                });
+
   p.add_option('A', "archive-ttl", "archived blocks will be deleted after this time (in seconds) default=365*86400",
                [&](td::Slice fname) {
                  auto v = td::to_double(fname);
                  acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_archive_ttl, v); });
                  return td::Status::OK();
                });
+
   p.add_option('K', "key-proof-ttl", "key blocks will be deleted after this time (in seconds) default=365*86400*10",
                [&](td::Slice fname) {
                  auto v = td::to_double(fname);
                  acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_key_proof_ttl, v); });
                  return td::Status::OK();
                });
+
   p.add_option('S', "sync-before", "in initial sync download all blocks for last given seconds default=3600",
                [&](td::Slice fname) {
                  auto v = td::to_double(fname);
                  acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_sync_ttl, v); });
                  return td::Status::OK();
                });
+
   p.add_option('T', "truncate-db", "truncate db (with specified seqno as new top masterchain block seqno)",
                [&](td::Slice fname) {
                  auto v = td::to_integer<ton::BlockSeqno>(fname);
                  acts.push_back([&x, v]() { td::actor::send_closure(x, &ValidatorEngine::set_truncate_seqno, v); });
                  return td::Status::OK();
                });
+
   p.add_option('U', "unsafe-catchain-restore", "use SLOW and DANGEROUS catchain recover method", [&](td::Slice id) {
     TRY_RESULT(seq, td::to_integer_safe<ton::CatchainSeqno>(id));
     acts.push_back([&x, seq]() { td::actor::send_closure(x, &ValidatorEngine::add_unsafe_catchain, seq); });
     return td::Status::OK();
   });
+
   td::uint32 threads = 7;
+
   p.add_option('t', "threads", PSTRING() << "number of threads (default=" << threads << ")", [&](td::Slice fname) {
     td::int32 v;
     try {
@@ -3429,6 +3472,7 @@ int main(int argc, char *argv[]) {
     threads = v;
     return td::Status::OK();
   });
+
   p.add_option('u', "user", "change user", [&](td::Slice user) { return td::change_user(user); });
   auto S = p.run(argc, argv);
   if (S.is_error()) {
@@ -3451,6 +3495,7 @@ int main(int argc, char *argv[]) {
     acts.clear();
     td::actor::send_closure(x, &ValidatorEngine::run);
   });
+
   while (scheduler.run(1)) {
     if (need_stats_flag.exchange(false)) {
       dump_stats();

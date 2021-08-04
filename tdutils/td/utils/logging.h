@@ -68,9 +68,7 @@
       ? (void)0                                                                           \
       : ::td::detail::Voidify() & LOGGER(interface, options, runtime_level, comment)
 
-#define LOG_IMPL(strip_level, level, condition, comment) \
-  LOG_IMPL_FULL(*::td::log_interface, ::td::log_options, strip_level, VERBOSITY_NAME(level), condition, comment)
-
+#define LOG_IMPL(strip_level, level, condition, comment) LOG_IMPL_FULL(*::td::log_interface, ::td::log_options, strip_level, VERBOSITY_NAME(level), condition, comment)
 #define LOG(level) LOG_IMPL(level, level, true, ::td::Slice())
 #define LOG_IF(level, condition) LOG_IMPL(level, level, condition, #condition)
 
@@ -81,6 +79,14 @@
 
 #define LOG_TAG ::td::Logger::tag_
 #define LOG_TAG2 ::td::Logger::tag2_
+
+// ===========================================================================================
+// validator monitoring log
+#define XLOG_IMPL(strip_level, level, condition, comment) LOG_IMPL_FULL(*::td::Xlog_interface, ::td::log_options, strip_level, VERBOSITY_NAME(level), condition, comment)
+#define XLOG(level) LOG_IMPL(level, level, true, ::td::Slice())
+#define XLOG_IF(level, condition) LOG_IMPL(level, level, condition, #condition)
+#define XLOG_ROTATE() ::td::Xlog_interface->rotate()
+// ===========================================================================================
 
 #if TD_CLANG
 bool no_return_func() __attribute__((analyzer_noreturn));
@@ -212,6 +218,7 @@ class NullLog : public LogInterface {
 
 extern LogInterface *const default_log_interface;
 extern LogInterface *log_interface;
+extern LogInterface *Xlog_interface;
 
 using OnFatalErrorCallback = void (*)(CSlice message);
 void set_log_fatal_error_callback(OnFatalErrorCallback callback);

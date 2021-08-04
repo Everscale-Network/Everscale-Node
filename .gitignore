@@ -11,5 +11,7 @@ crypto/smartcont/auto/
 test/regression-tests.cache/
 *.swp
 **/*build*/
+**/*.vs*/
+**/*out*/
 .idea/
 gitrevision.hh

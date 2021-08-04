@@ -63,7 +63,7 @@
 #include "crypto/vm/utils.h"
 #include "crypto/common/util.h"
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #include <fcntl.h>
 #endif
@@ -3444,8 +3444,7 @@ td::Status TestNode::ValidatorLoadInfo::unpack_vset() {
   return td::Status::OK();
 }
 
-bool TestNode::ValidatorLoadInfo::store_record(const td::Bits256& key, const block::DiscountedCounter& mc_cnt,
-                                               const block::DiscountedCounter& shard_cnt) {
+bool TestNode::ValidatorLoadInfo::store_record(const td::Bits256& key, const block::DiscountedCounter& mc_cnt, const block::DiscountedCounter& shard_cnt) {
   if (!(mc_cnt.is_valid() && shard_cnt.is_valid())) {
     return false;
   }
@@ -3461,7 +3460,8 @@ bool TestNode::ValidatorLoadInfo::store_record(const td::Bits256& key, const blo
   if (it == vset_map.end()) {
     return false;
   }
-  created.at(it->second) = std::make_pair<td::int64, td::int64>(mc_cnt.total, shard_cnt.total);
+
+  created.at(it->second) = std::make_pair<td::int64, td::int64>((td::int64)mc_cnt.total, (td::int64)shard_cnt.total);
   return true;
 }
 
@@ -3476,10 +3476,9 @@ bool TestNode::load_creator_stats(std::unique_ptr<TestNode::ValidatorLoadInfo> l
   info.created.resize(0);
   info.created.resize(info.vset->total, std::make_pair<td::uint64, td::uint64>(0, 0));
   ton::UnixTime min_utime = info.valid_since - 1000;
-  return get_creator_stats(
-      info.blk_id, 1000, min_utime,
-      [min_utime, &info](const td::Bits256& key, const block::DiscountedCounter& mc_cnt,
-                         const block::DiscountedCounter& shard_cnt) -> bool {
+  return get_creator_stats(info.blk_id, 1000, min_utime,
+      [min_utime, &info](const td::Bits256& key, const block::DiscountedCounter& mc_cnt, const block::DiscountedCounter& shard_cnt) -> bool 
+      {
         info.store_record(key, mc_cnt, shard_cnt);
         return true;
       },
@@ -4229,14 +4228,14 @@ int main(int argc, char* argv[]) {
   });
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
     td::set_signal_handler(td::SignalType::HangUp, [](int sig) {
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
       close(0);
       setsid();
 #endif
     }).ensure();
     return td::Status::OK();
   });
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
   p.add_option('l', "logname", "log to file", [&](td::Slice fname) {
     auto FileLog = td::FileFd::open(td::CSlice(fname.str().c_str()),
                                     td::FileFd::Flags::Create | td::FileFd::Flags::Append | td::FileFd::Flags::Write)

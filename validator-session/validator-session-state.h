@@ -585,34 +585,40 @@ class ValidatorSessionOldRoundState : public ValidatorSessionDescription::RootOb
 using VoteVector = CntSortedVector<const SessionVoteCandidate*, SessionVoteCandidate::Compare>;
 using ApproveVector = CntSortedVector<const SessionBlockCandidate*, SessionBlockCandidate::Compare>;
 
+// ######################################################################################################################
 class ValidatorSessionRoundAttemptState : public ValidatorSessionDescription::RootObject {
  public:
-  static HashType create_hash(ValidatorSessionDescription& desc, td::uint32 seqno, HashType votes,
-                              HashType precommitted, bool vote_for_inited, HashType vote_for) {
-    auto obj = create_tl_object<ton_api::hashable_validatorSessionRoundAttempt>(seqno, votes, precommitted,
-                                                                                vote_for_inited, vote_for);
+  
+  static HashType create_hash(ValidatorSessionDescription& desc, td::uint32 seqno, HashType votes, HashType precommitted, HashType vote_for, bool vote_for_inited) {
+    auto obj = create_tl_object<ton_api::hashable_validatorSessionRoundAttempt>(seqno, votes, precommitted, vote_for, vote_for_inited);
     return desc.compute_hash(serialize_tl_object(obj, true).as_slice());
   }
-  static bool compare(const RootObject* r, td::uint32 seqno, const VoteVector* votes,
-                      const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited,
-                      HashType hash) {
+
+  static bool compare(const RootObject* r, td::uint32 seqno, const VoteVector* votes, const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited, HashType hash) {
     if (!r || r->get_size() < sizeof(ValidatorSessionRoundAttemptState)) {
       return false;
     }
     auto R = static_cast<const ValidatorSessionRoundAttemptState*>(r);
-    return R->seqno_ == seqno && R->votes_ == votes && R->precommitted_ == precommitted && R->vote_for_ == vote_for &&
-           R->vote_for_inited_ == vote_for_inited && R->hash_ == hash;
+
+    return R->seqno_ == seqno 
+        && R->votes_ == votes 
+        && R->precommitted_ == precommitted 
+        && R->vote_for_ == vote_for 
+        && R->vote_for_inited_ == vote_for_inited 
+        && R->hash_ == hash;
   }
-  static auto lookup(ValidatorSessionDescription& desc, td::uint32 seqno, const VoteVector* votes,
-                     const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited,
-                     HashType hash, bool temp) {
-    auto r = desc.get_by_hash(hash, temp);
-    if (compare(r, seqno, votes, precommitted, vote_for, vote_for_inited, hash)) {
+
+  static auto lookup(ValidatorSessionDescription& desc, td::uint32 seqno, const VoteVector* votes, const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited, HashType hash, bool temp) {
+    const ValidatorSessionDescription::RootObject* root_obj = desc.get_by_hash(hash, temp);
+    if (compare(root_obj, seqno, votes, precommitted, vote_for, vote_for_inited, hash)) {
       desc.on_reuse();
-      return static_cast<const ValidatorSessionRoundAttemptState*>(r);
+      return static_cast<const ValidatorSessionRoundAttemptState*>(root_obj);
     }
+
     return static_cast<const ValidatorSessionRoundAttemptState*>(nullptr);
   }
+
+  // ===============================================================================================================
   static const ValidatorSessionRoundAttemptState* move_to_persistent(ValidatorSessionDescription& desc,
                                                                      const ValidatorSessionRoundAttemptState* b) {
     if (desc.is_persistent(b)) {
@@ -627,35 +633,31 @@ class ValidatorSessionRoundAttemptState : public ValidatorSessionDescription::Ro
       return r;
     }
 
-    return new (desc, false) ValidatorSessionRoundAttemptState{desc,     b->seqno_,           votes,   precommitted,
-                                                               vote_for, b->vote_for_inited_, b->hash_};
+    return new (desc, false) ValidatorSessionRoundAttemptState{desc, b->seqno_, votes, precommitted, vote_for, b->vote_for_inited_, b->hash_};
   }
-
-  static const ValidatorSessionRoundAttemptState* create(ValidatorSessionDescription& desc, td::uint32 seqno,
-                                                         const VoteVector* votes, const CntVector<bool>* precommitted,
-                                                         const SentBlock* vote_for, bool vote_for_inited) {
-    auto hash = create_hash(desc, seqno, get_vs_hash(desc, votes), get_vs_hash(desc, precommitted),
-                            get_vs_hash(desc, vote_for), vote_for_inited);
-
+  // ===============================================================================================================
+  static const ValidatorSessionRoundAttemptState* create(ValidatorSessionDescription& desc, td::uint32 seqno, const VoteVector* votes, const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited) {
+    auto hash = create_hash(desc, seqno, get_vs_hash(desc, votes), get_vs_hash(desc, precommitted), get_vs_hash(desc, vote_for), vote_for_inited);
     auto r = lookup(desc, seqno, votes, precommitted, vote_for, vote_for_inited, hash, true);
     if (r) {
       return r;
     }
 
-    return new (desc, true)
-        ValidatorSessionRoundAttemptState(desc, seqno, votes, precommitted, vote_for, vote_for_inited, hash);
+    return new (desc, true) ValidatorSessionRoundAttemptState(desc, seqno, votes, precommitted, vote_for, vote_for_inited, hash);
   }
+  // ===============================================================================================================
+
   static const ValidatorSessionRoundAttemptState* create(ValidatorSessionDescription& desc, td::uint32 seqno) {
     std::vector<bool> x;
     x.resize(desc.get_total_nodes(), false);
-    auto p = CntVector<bool>::create(desc, std::move(x));
+    const ton::validatorsession::CntVector<bool>* p = CntVector<bool>::create(desc, std::move(x));
 
-    return create(desc, seqno, nullptr, p, nullptr, false);
+    //            desc, seqno, votes,  precommitted, vote_for, vote_for_inited
+    return create(desc, seqno, nullptr, p,            nullptr, false);
   }
+  // ===============================================================================================================
 
-  ValidatorSessionRoundAttemptState(ValidatorSessionDescription& desc, td::uint32 seqno, const VoteVector* votes,
-                                    const CntVector<bool>* precommitted, const SentBlock* vote_for,
-                                    bool vote_for_inited, HashType hash)
+  ValidatorSessionRoundAttemptState(ValidatorSessionDescription& desc, td::uint32 seqno, const VoteVector* votes, const CntVector<bool>* precommitted, const SentBlock* vote_for, bool vote_for_inited, HashType hash)
       : RootObject{sizeof(ValidatorSessionRoundAttemptState)}
       , seqno_(seqno)
       , votes_(votes)
@@ -665,23 +667,30 @@ class ValidatorSessionRoundAttemptState : public ValidatorSessionDescription::Ro
       , hash_(std::move(hash)) {
     desc.update_hash(this, hash_);
   }
+
   auto get_hash(ValidatorSessionDescription& desc) const {
     return hash_;
   }
+
   auto get_seqno() const {
     return seqno_;
   }
+
   auto get_votes() const {
     return votes_;
   }
+
   auto get_precommits() const {
     return precommitted_;
   }
+
   const SentBlock* get_voted_block(ValidatorSessionDescription& desc, bool& f) const;
+  
   const SentBlock* get_vote_for_block(ValidatorSessionDescription& desc, bool& f) const {
     f = vote_for_inited_;
     return vote_for_;
   }
+  
   bool check_attempt_is_precommitted(ValidatorSessionDescription& desc) const;
   bool check_vote_received_from(td::uint32 src_idx) const;
   bool check_precommit_received_from(td::uint32 src_idx) const;
@@ -689,68 +698,30 @@ class ValidatorSessionRoundAttemptState : public ValidatorSessionDescription::Ro
   bool operator<(const ValidatorSessionRoundAttemptState& right) const {
     return seqno_ < right.seqno_;
   }
+  
   struct Compare {
     bool operator()(const ValidatorSessionRoundAttemptState* a, const ValidatorSessionRoundAttemptState* b) const {
       return *a < *b;
     }
   };
 
-  static const ValidatorSessionRoundAttemptState* merge(ValidatorSessionDescription& desc,
-                                                        const ValidatorSessionRoundAttemptState* left,
-                                                        const ValidatorSessionRoundAttemptState* right);
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att,
-                                                         const ton_api::validatorSession_message_voteFor& act,
-                                                         const ValidatorSessionRoundState* round);
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att,
-                                                         const ton_api::validatorSession_message_vote& act,
-                                                         const ValidatorSessionRoundState* round);
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att,
-                                                         const ton_api::validatorSession_message_precommit& act,
-                                                         const ValidatorSessionRoundState* round);
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att,
-                                                         const ton_api::validatorSession_message_empty& act,
-                                                         const ValidatorSessionRoundState* round);
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att,
-                                                         const ton_api::validatorSession_round_Message* action,
-                                                         const ValidatorSessionRoundState* round);
+  static const ValidatorSessionRoundAttemptState*  merge(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* left, const ValidatorSessionRoundAttemptState* right);
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ton_api::validatorSession_message_voteFor& act,   const ValidatorSessionRoundState* round);
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ton_api::validatorSession_message_vote& act,      const ValidatorSessionRoundState* round);
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ton_api::validatorSession_message_precommit& act, const ValidatorSessionRoundState* round);
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ton_api::validatorSession_message_empty& act,     const ValidatorSessionRoundState* round);
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ton_api::validatorSession_round_Message* action,  const ValidatorSessionRoundState* round);
+  
   template <class T>
-  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc,
-                                                         const ValidatorSessionRoundAttemptState* state,
-                                                         td::uint32 src_idx, td::uint32 att, const T& action,
-                                                         const ValidatorSessionRoundState* round) {
+  static const ValidatorSessionRoundAttemptState* action(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const T& action, const ValidatorSessionRoundState* round) {
     UNREACHABLE();
   }
-  static const ValidatorSessionRoundAttemptState* try_vote(ValidatorSessionDescription& desc,
-                                                           const ValidatorSessionRoundAttemptState* state,
-                                                           td::uint32 src_idx, td::uint32 att,
-                                                           const ValidatorSessionRoundState* round,
-                                                           const ton_api::validatorSession_round_Message* cmp,
-                                                           bool& made);
-  static const ValidatorSessionRoundAttemptState* try_precommit(ValidatorSessionDescription& desc,
-                                                                const ValidatorSessionRoundAttemptState* state,
-                                                                td::uint32 src_idx, td::uint32 att,
-                                                                const ValidatorSessionRoundState* round,
-                                                                const ton_api::validatorSession_round_Message* cmp,
-                                                                bool& made);
-  static const ValidatorSessionRoundAttemptState* make_one(ValidatorSessionDescription& desc,
-                                                           const ValidatorSessionRoundAttemptState* state,
-                                                           td::uint32 src_idx, td::uint32 att,
-                                                           const ValidatorSessionRoundState* round,
-                                                           const ton_api::validatorSession_round_Message* cmp,
-                                                           bool& made);
-  tl_object_ptr<ton_api::validatorSession_round_Message> create_action(ValidatorSessionDescription& desc,
-                                                                       const ValidatorSessionRoundState* round,
-                                                                       td::uint32 src_idx, td::uint32 att) const;
+
+  static const ValidatorSessionRoundAttemptState*      try_vote(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ValidatorSessionRoundState* round, const ton_api::validatorSession_round_Message* cmp, bool& made);
+  static const ValidatorSessionRoundAttemptState* try_precommit(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ValidatorSessionRoundState* round, const ton_api::validatorSession_round_Message* cmp, bool& made);
+  static const ValidatorSessionRoundAttemptState*      make_one(ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx, td::uint32 att, const ValidatorSessionRoundState* round, const ton_api::validatorSession_round_Message* cmp, bool& made);
+  
+  tl_object_ptr<ton_api::validatorSession_round_Message> create_action(ValidatorSessionDescription& desc, const ValidatorSessionRoundState* round, td::uint32 src_idx, td::uint32 att) const;
   void dump(ValidatorSessionDescription& desc, td::StringBuilder& sb) const;
 
  private:
@@ -761,9 +732,9 @@ class ValidatorSessionRoundAttemptState : public ValidatorSessionDescription::Ro
   const bool vote_for_inited_;
   const HashType hash_;
 };
+// ######################################################################################################################
 
-using AttemptVector =
-    CntSortedVector<const ValidatorSessionRoundAttemptState*, ValidatorSessionRoundAttemptState::Compare>;
+using AttemptVector = CntSortedVector<const ValidatorSessionRoundAttemptState*, ValidatorSessionRoundAttemptState::Compare>;
 
 class ValidatorSessionRoundState : public ValidatorSessionDescription::RootObject {
  public:
@@ -935,8 +906,7 @@ class ValidatorSessionRoundState : public ValidatorSessionDescription::RootObjec
   }
 
   const SessionBlockCandidate* get_block(ValidatorSessionCandidateId block_hash) const;
-  std::vector<td::uint32> get_block_approvers(ValidatorSessionDescription& desc,
-                                              ValidatorSessionCandidateId block) const;
+  std::vector<td::uint32> get_block_approvers(ValidatorSessionDescription& desc, ValidatorSessionCandidateId block) const;
   std::vector<const SentBlock*> get_blocks_approved_by(ValidatorSessionDescription& desc, td::uint32 src_idx) const;
 
   bool check_block_is_signed(ValidatorSessionDescription& desc) const;
@@ -949,16 +919,13 @@ class ValidatorSessionRoundState : public ValidatorSessionDescription::RootObjec
   bool check_block_is_sent_by(td::uint32 src_idx) const;
 
   bool check_need_generate_vote_for(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att) const;
-  tl_object_ptr<ton_api::validatorSession_message_voteFor> generate_vote_for(ValidatorSessionDescription& desc,
-                                                                             td::uint32 src_idx, td::uint32 att) const;
+  tl_object_ptr<ton_api::validatorSession_message_voteFor> generate_vote_for(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att) const;
 
   const SentBlock* choose_block_to_sign(ValidatorSessionDescription& desc, td::uint32 src_idx, bool& found) const;
   std::vector<const SentBlock*> choose_blocks_to_approve(ValidatorSessionDescription& desc, td::uint32 src_idx) const;
-  const SentBlock* choose_block_to_vote(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att,
-                                        const SentBlock* vote_for, bool vote_for_inited, bool& found) const;
+  const SentBlock* choose_block_to_vote(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att, const SentBlock* vote_for, bool vote_for_inited, bool& found) const;
 
-  tl_object_ptr<ton_api::validatorSession_round_Message> create_action(ValidatorSessionDescription& desc,
-                                                                       td::uint32 src_idx, td::uint32 att) const;
+  tl_object_ptr<ton_api::validatorSession_round_Message> create_action(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att) const;
   void dump(ValidatorSessionDescription& desc, td::StringBuilder& sb, td::uint32 att) const;
   void dump_cur_attempt(ValidatorSessionDescription& desc, td::StringBuilder& sb) const;
 

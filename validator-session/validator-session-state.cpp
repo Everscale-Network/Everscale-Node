@@ -416,20 +416,28 @@ const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::merg
       vote_for = right->vote_for_;
     }
   }
+ 
+  if (vote_for_inited) {
+    XLOG(INFO) << "~~~ Vote for block ID: " << SentBlock::get_block_id(vote_for)
+               << " Left: " << SentBlock::get_block_id(left->vote_for_)
+               << " Right: " << SentBlock::get_block_id(right->vote_for_);
+  }
 
   auto precommitted = CntVector<bool>::merge(desc, left->precommitted_, right->precommitted_);
-  auto votes = VoteVector::merge(desc, left->votes_, right->votes_,
-                                 [&](const SessionVoteCandidate* l, const SessionVoteCandidate* r) {
+  auto votes = VoteVector::merge(desc, left->votes_, right->votes_, 
+                                 [&](const SessionVoteCandidate* l,  const SessionVoteCandidate* r) {
                                    return SessionVoteCandidate::merge(desc, l, r);
                                  });
-
-  return ValidatorSessionRoundAttemptState::create(desc, left->seqno_, std::move(votes), std::move(precommitted),
-                                                   vote_for, vote_for_inited);
+   
+  return ValidatorSessionRoundAttemptState::create(desc, left->seqno_, std::move(votes), std::move(precommitted), vote_for, vote_for_inited);
 }
 
-const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::action(
-    ValidatorSessionDescription& desc, const ValidatorSessionRoundAttemptState* state, td::uint32 src_idx,
-    td::uint32 att, const ton_api::validatorSession_message_voteFor& act, const ValidatorSessionRoundState* round) {
+const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::action(ValidatorSessionDescription& desc, 
+                                                                                   const ValidatorSessionRoundAttemptState* state, 
+                                                                                   td::uint32 src_idx, 
+                                                                                   td::uint32 att, 
+                                                                                   const ton_api::validatorSession_message_voteFor& act, 
+                                                                                   const ValidatorSessionRoundState* round) {
   if (state->vote_for_inited_) {
     VLOG(VALIDATOR_SESSION_WARNING) << "[validator session][node " << desc.get_source_id(src_idx) << "][" << act
                                     << "]: invalid message: duplicate VOTEFOR";
@@ -464,8 +472,7 @@ const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::acti
     return state;
   }
 
-  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, state->votes_, state->precommitted_,
-                                                   x->get_block(), true);
+  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, state->votes_, state->precommitted_, x->get_block(), true);
 }
 
 const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::action(
@@ -527,8 +534,7 @@ const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::try_
   }
   candidate = SessionVoteCandidate::push(desc, candidate, src_idx);
   auto v = VoteVector::push(desc, state->votes_, candidate);
-  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, std::move(v), state->precommitted_,
-                                                   state->vote_for_, state->vote_for_inited_);
+  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, std::move(v), state->precommitted_, state->vote_for_, state->vote_for_inited_);
 }
 
 const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::try_precommit(
@@ -564,8 +570,7 @@ const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::try_
   }
 
   auto v = CntVector<bool>::change(desc, state->precommitted_, src_idx, true);
-  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, state->votes_, std::move(v), state->vote_for_,
-                                                   state->vote_for_inited_);
+  return ValidatorSessionRoundAttemptState::create(desc, state->seqno_, state->votes_, std::move(v), state->vote_for_, state->vote_for_inited_);
 }
 
 const ValidatorSessionRoundAttemptState* ValidatorSessionRoundAttemptState::make_one(
@@ -1139,9 +1144,7 @@ tl_object_ptr<ton_api::validatorSession_message_voteFor> ValidatorSessionRoundSt
                                                                      v[x % v.size()]);
 }
 
-const SentBlock* ValidatorSessionRoundState::choose_block_to_vote(ValidatorSessionDescription& desc, td::uint32 src_idx,
-                                                                  td::uint32 att, const SentBlock* vote_for,
-                                                                  bool vote_for_inited, bool& found) const {
+const SentBlock* ValidatorSessionRoundState::choose_block_to_vote(ValidatorSessionDescription& desc, td::uint32 src_idx, td::uint32 att, const SentBlock* vote_for, bool vote_for_inited, bool& found) const {
   found = false;
   if (!sent_blocks_) {
     return nullptr;

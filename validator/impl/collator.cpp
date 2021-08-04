@@ -645,7 +645,9 @@ void Collator::got_neighbor_out_queue(int i, td::Result<Ref<MessageQueue>> res) 
     fatal_error("no OutMsgQueueInfo in queue info in a neighbor state");
     return;
   }
-  block::gen::OutMsgQueueInfo::Record qinfo;
+
+block::gen::OutMsgQueueInfo::Record qinfo;
+  
   if (!tlb::unpack_cell(outq_descr->root_cell(), qinfo)) {
     fatal_error("cannot unpack neighbor output queue info");
     return;

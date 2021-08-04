@@ -65,7 +65,7 @@ class NativeFd {
   Fd release();
 
   Status validate() const;
-
+  
  private:
 #if TD_PORT_POSIX
   MovableValue<Fd, -1> fd_;

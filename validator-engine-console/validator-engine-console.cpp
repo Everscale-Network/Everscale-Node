@@ -53,7 +53,7 @@
 #include "vm/cells/MerkleProof.h"
 #include "ton/ton-shard.h"
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #include <fcntl.h>
 #endif

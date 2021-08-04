@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 project(TON VERSION 0.5 LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 #set(OPENSSL_USE_STATIC_LIBS TRUE)
@@ -557,18 +561,26 @@ if (GIT_SCM AND GITDIR)
   set (build_date_cmd "date")
   set (build_date_args "+%Y-%m-%d %T %z")
   set (new_line "\n")
-  execute_process(COMMAND ${build_date_cmd} ${build_date_args}
-          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-          OUTPUT_VARIABLE build_date)
 
+  execute_process(
+                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                  COMMAND ${GIT_SCM} log -1 "--pretty=format:%H %ai" 
+                  OUTPUT_VARIABLE Git_Commit_No)
+  message(STATUS "Commit No: ${Git_Commit_No}")
+  
+  execute_process(
+                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                  COMMAND ${build_date_cmd} ${build_date_args}
+                  OUTPUT_VARIABLE build_date)
   string(REPLACE "\n" "${eol_char}" build_date "${build_date}")
-  add_custom_command(OUTPUT ${PROJECT_SOURCE_DIR}/gitrevision.hh
-          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-          COMMAND ${CMAKE_COMMAND} -E echo_append "#define BUILD_REVISION \"" > ${PROJECT_SOURCE_DIR}/gitrevision.hh
-          COMMAND ${GIT_SCM} log -1 "--pretty=format:%H %ai" >> ${PROJECT_SOURCE_DIR}/gitrevision.hh
-          COMMAND ${CMAKE_COMMAND} -E echo "\"" >> ${PROJECT_SOURCE_DIR}/gitrevision.hh
-          COMMAND ${CMAKE_COMMAND} -E echo_append "#define BUILD_DATE \"${build_date}\"" >> ${PROJECT_SOURCE_DIR}/gitrevision.hh
+  message(STATUS "Build date: ${build_date}")
+
+  add_custom_command(
           DEPENDS ${GITDIR}/logs/HEAD
+          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+          OUTPUT ${PROJECT_SOURCE_DIR}/gitrevision.hh
+          COMMAND ${CMAKE_COMMAND} -E echo "#define BUILD_REVISION \"${Git_Commit_No}\"" > ${PROJECT_SOURCE_DIR}/gitrevision.hh
+          COMMAND ${CMAKE_COMMAND} -E echo "#define BUILD_DATE \"${build_date}\"" >> ${PROJECT_SOURCE_DIR}/gitrevision.hh
           VERBATIM
           )
   add_custom_target(gitrev DEPENDS ${PROJECT_SOURCE_DIR}/gitrevision.hh)

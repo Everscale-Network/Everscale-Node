@@ -52,7 +52,7 @@
 #include <list>
 #include <set>
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 
@@ -1193,7 +1193,7 @@ int main(int argc, char *argv[]) {
       });
   p.add_option('d', "daemonize", "set SIGHUP", [&]() {
     td::set_signal_handler(td::SignalType::HangUp, [](int sig) {
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
       close(0);
       setsid();
 #endif

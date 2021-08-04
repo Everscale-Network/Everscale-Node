@@ -17,7 +17,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "user.h"
-#if TD_LINUX
+#if TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #include <sys/types.h>
 #include <pwd.h>
@@ -26,7 +26,7 @@
 
 namespace td {
 
-#if TD_LINUX
+#if TD_LINUX || TD_FREEBSD
 td::Status change_user(td::Slice user) {
   struct passwd *pw;
   if (getuid() != 0 || geteuid() != 0) {

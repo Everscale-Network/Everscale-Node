@@ -258,6 +258,7 @@ static DefaultLog default_log;
 
 LogInterface *const default_log_interface = &default_log;
 LogInterface *log_interface = default_log_interface;
+LogInterface *Xlog_interface = default_log_interface;
 
 static OnFatalErrorCallback on_fatal_error_callback = nullptr;
 
@@ -279,6 +280,7 @@ int sdl_cnt = 0;
 int sdl_verbosity = 0;
 
 }  // namespace
+
 ScopedDisableLog::ScopedDisableLog() {
   std::unique_lock<std::mutex> guard(sdl_mutex);
   if (sdl_cnt == 0) {

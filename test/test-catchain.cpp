@@ -42,7 +42,7 @@
 #include "catchain/catchain.h"
 #include "common/errorlog.h"
 
-#if TD_DARWIN || TD_LINUX
+#if TD_DARWIN || TD_LINUX || TD_FREEBSD
 #include <unistd.h>
 #endif
 #include <iostream>
