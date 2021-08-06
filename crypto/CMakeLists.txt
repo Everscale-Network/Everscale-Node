@@ -4,6 +4,14 @@ if (NOT OPENSSL_FOUND)
   find_package(OpenSSL REQUIRED)
 endif()
 
+add_subdirectory(algebra)
+add_subdirectory(cipher)
+add_subdirectory(fft)
+add_subdirectory(hash)
+add_subdirectory(multiprecision)
+add_subdirectory(zk)
+add_subdirectory(marshalling)
+
 set(TON_CRYPTO_SOURCE
   Ed25519.cpp
   common/bigint.cpp
@@ -262,7 +270,8 @@ set(FIFT_TEST_SOURCE
 add_library(ton_crypto STATIC ${TON_CRYPTO_SOURCE})
 target_include_directories(ton_crypto PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
-target_link_libraries(ton_crypto PUBLIC ${OPENSSL_CRYPTO_LIBRARY} tdutils tddb_utils)
+target_link_libraries(ton_crypto PUBLIC ${OPENSSL_CRYPTO_LIBRARY} tdutils
+    tddb_utils crypto3::zk crypto3::algebra crypto3::fft crypto3::multiprecision crypto3::marshalling)
 if (NOT WIN32)
   target_link_libraries(ton_crypto PUBLIC dl z)
 endif()
@@ -393,7 +402,7 @@ target_include_directories(create-state PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT
 if (INTERNAL_COMPILE)
   target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block tonlib)
 else()
-  if (TONLIB_COMPILE) 
+  if (TONLIB_COMPILE)
     target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block tonlib)
   else()
     target_link_libraries(create-state PUBLIC ton_crypto fift-lib ton_block)

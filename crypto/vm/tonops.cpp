@@ -16,6 +16,11 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+
+#include <vector>
+#include <queue>
+#include <tuple>
+
 #include <functional>
 #include "vm/tonops.h"
 #include "vm/log.h"
@@ -29,8 +34,20 @@
 
 #include "openssl/digest.hpp"
 
-namespace vm {
+#include <nil/crypto3/algebra/curves/bls12.hpp>
+#include <nil/crypto3/algebra/fields/bls12/base_field.hpp>
+#include <nil/crypto3/algebra/fields/bls12/scalar_field.hpp>
+#include <nil/crypto3/algebra/fields/arithmetic_params/bls12.hpp>
+#include <nil/crypto3/algebra/curves/params/multiexp/bls12.hpp>
+#include <nil/crypto3/algebra/curves/params/wnaf/bls12.hpp>
 
+#include <nil/crypto3/zk/snark/schemes/ppzksnark/r1cs_gg_ppzksnark.hpp>
+#include <nil/crypto3/zk/snark/schemes/ppzksnark/r1cs_gg_ppzksnark/marshalling.hpp>
+#include <nil/crypto3/zk/snark/algorithms/generate.hpp>
+
+#include <nil/marshalling/status_type.hpp>
+
+namespace vm {
 namespace {
 
 bool debug(const char* str) TD_UNUSED;
@@ -338,6 +355,69 @@ int exec_compute_hash(VmState* st, int mode) {
   return 0;
 }
 
+namespace {
+
+  std::vector<unsigned char> obtain_cells_data(td::Ref<vm::DataCell> in_cl) {
+    std::vector<unsigned char> byte_blob;
+
+    std::queue<td::Ref<vm::DataCell>> cl_q;
+    cl_q.push(in_cl);
+    while (!cl_q.empty()) {
+      td::Ref<vm::DataCell> cl = cl_q.front();
+      cl_q.pop();
+
+      const unsigned char* current_reference_data = cl->get_data();
+
+      std::size_t current_data_size = cl->size() / 8;
+
+      byte_blob.reserve(byte_blob.size() + current_data_size);
+      byte_blob.insert(byte_blob.end(), current_reference_data, 
+        current_reference_data + current_data_size);
+
+      unsigned count = cl->size_refs();
+
+      for (unsigned i = 0; i < count; i++) {
+        cl_q.push(td::Ref<vm::DataCell>(cl->get_ref(i)));
+      }
+    }
+
+    return byte_blob;
+  }
+
+}
+
+template <typename CurveType>
+int exec_verify_groth16(VmState* st) {
+  using namespace nil::crypto3::algebra;
+  using namespace nil::crypto3::zk;
+
+  typedef zk::snark::r1cs_gg_ppzksnark<CurveType> scheme_type;
+
+  VM_LOG(st) << "execute VERGRTH16";
+  Stack& stack = st->get_stack();
+  auto proof_cell = stack.pop_cell();
+  
+  std::vector<unsigned char> data = obtain_cells_data(td::Ref<vm::DataCell>(proof_cell));
+
+  typename nil::marshalling::status_type processingStatus = nil::marshalling::status_type::success;
+
+  auto tup = nil::marshalling::verifier_input_deserializer_tvm<scheme_type>::verifier_input_process(
+    data.cbegin(), data.cend(), processingStatus);
+
+  if (processingStatus != nil::marshalling::status_type::success){
+
+      stack.push_bool(false);
+      return 0;
+  }
+
+  typename scheme_type::proof_type de_prf = std::get<2>(tup);
+  typename scheme_type::primary_input_type de_pi = std::get<1>(tup);
+  typename scheme_type::verification_key_type de_vk = std::get<0>(tup);
+
+  stack.push_bool(snark::r1cs_gg_ppzksnark<CurveType>::verify(de_vk, de_pi, de_prf));
+  return 0;
+}
+
 int exec_compute_sha256(VmState* st) {
   VM_LOG(st) << "execute SHA256U";
   Stack& stack = st->get_stack();
@@ -393,11 +473,14 @@ int exec_ed25519_check_signature(VmState* st, bool from_slice) {
 
 void register_ton_crypto_ops(OpcodeTable& cp0) {
   using namespace std::placeholders;
+  using namespace nil::crypto3::algebra;
+
   cp0.insert(OpcodeInstr::mksimple(0xf900, 16, "HASHCU", std::bind(exec_compute_hash, _1, 0)))
       .insert(OpcodeInstr::mksimple(0xf901, 16, "HASHSU", std::bind(exec_compute_hash, _1, 1)))
       .insert(OpcodeInstr::mksimple(0xf902, 16, "SHA256U", exec_compute_sha256))
       .insert(OpcodeInstr::mksimple(0xf910, 16, "CHKSIGNU", std::bind(exec_ed25519_check_signature, _1, false)))
-      .insert(OpcodeInstr::mksimple(0xf911, 16, "CHKSIGNS", std::bind(exec_ed25519_check_signature, _1, true)));
+      .insert(OpcodeInstr::mksimple(0xf911, 16, "CHKSIGNS", std::bind(exec_ed25519_check_signature, _1, true)))
+      .insert(OpcodeInstr::mksimple(0xf912, 16, "VERGRTH16", exec_verify_groth16<curves::bls12<381>>));
 }
 
 int exec_compute_data_size(VmState* st, int mode) {
