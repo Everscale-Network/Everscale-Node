@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.0.2 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(BOOST_MIN_VERSION 1.74.0)
+set(GCC_MEN_VERSION 10.2.0)
 
 project(TON VERSION 0.5 LANGUAGES C CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -90,6 +92,16 @@ option(TON_USE_ASAN "Use \"ON\" to enable AddressSanitizer." OFF)
 option(TON_USE_TSAN "Use \"ON\" to enable ThreadSanitizer." OFF)
 option(TON_USE_UBSAN "Use \"ON\" to enable UndefinedBehaviorSanitizer." OFF)
 set(TON_ARCH "native" CACHE STRING "Architecture, will be passed to -march=")
+
+if (CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS ${GCC_MEN_VERSION})
+    message(FATAL_ERROR "Require at least gcc version ${GCC_MEN_VERSION}")
+endif()
+
+find_package(Boost ${BOOST_MIN_VERSION} REQUIRED)
+if(Boost_FOUND)
+  include_directories(${Boost_INCLUDE_DIRS})
+endif()
+
 
 if (TON_USE_ABSEIL)
   message("Add abseil-cpp")
