@@ -10,3 +10,39 @@
 [submodule "third-party/libraptorq"]
 	path = third-party/libraptorq
 	url = https://github.com/ton-blockchain/libRaptorQ
+[submodule "crypto/ff"]
+	path = crypto/ff
+	url = git@github.com:nilfoundation/ff.git
+[submodule "crypto/zk"]
+	path = crypto/zk
+	url = git@github.com:nilfoundation/zk.git
+[submodule "crypto/multiprecision"]
+	path = crypto/multiprecision
+	url = https://github.com/nilfoundation/crypto3-multiprecision.git
+[submodule "crypto/pairing"]
+	path = crypto/pairing
+	url = git@github.com:nilfoundation/pairing.git
+[submodule "crypto/algebra"]
+	path = crypto/algebra
+	url = git@github.com:nilfoundation/algebra.git
+[submodule "crypto/hash"]
+	path = crypto/hash
+	url = git@github.com:nilfoundation/crypto3-hash.git
+[submodule "crypto/cipher"]
+	path = crypto/cipher
+	url = git@github.com:nilfoundation/crypto3-block.git
+[submodule "crypto/marshalling/core"]
+	path = crypto/marshalling/core
+	url = git@github.com:NilFoundation/marshalling.git
+[submodule "crypto/marshalling/algebra"]
+	path = crypto/marshalling/algebra
+	url = git@github.com:NilFoundation/crypto3-algebra-marshalling.git
+[submodule "crypto/marshalling/multiprecision"]
+	path = crypto/marshalling/multiprecision
+	url = git@github.com:NilFoundation/crypto3-multiprecision-marshalling.git
+[submodule "crypto/marshalling/zk"]
+	path = crypto/marshalling/zk
+	url = git@github.com:NilFoundation/crypto3-zk-marshalling.git
+[submodule "crypto/math"]
+	path = crypto/math
+	url = git@github.com:NilFoundation/crypto3-math.git

@@ -6,11 +6,14 @@ endif()
 
 add_subdirectory(algebra)
 add_subdirectory(cipher)
-add_subdirectory(fft)
+add_subdirectory(math)
 add_subdirectory(hash)
 add_subdirectory(multiprecision)
+add_subdirectory(marshalling/core)
+add_subdirectory(marshalling/multiprecision)
+add_subdirectory(marshalling/algebra)
+add_subdirectory(marshalling/zk)
 add_subdirectory(zk)
-add_subdirectory(marshalling)
 
 set(TON_CRYPTO_SOURCE
   Ed25519.cpp
@@ -271,7 +274,7 @@ add_library(ton_crypto STATIC ${TON_CRYPTO_SOURCE})
 target_include_directories(ton_crypto PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(ton_crypto PUBLIC ${OPENSSL_CRYPTO_LIBRARY} tdutils
-    tddb_utils crypto3::zk crypto3::algebra crypto3::fft crypto3::multiprecision crypto3::marshalling)
+    tddb_utils crypto3::zk crypto3::algebra crypto3::math crypto3::multiprecision marshalling::core marshalling::crypto3_multiprecision marshalling::crypto3_algebra marshalling::crypto3_zk)
 if (NOT WIN32)
   target_link_libraries(ton_crypto PUBLIC dl z)
 endif()

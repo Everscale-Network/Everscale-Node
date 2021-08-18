@@ -40,12 +40,17 @@
 #include <nil/crypto3/algebra/fields/arithmetic_params/bls12.hpp>
 #include <nil/crypto3/algebra/curves/params/multiexp/bls12.hpp>
 #include <nil/crypto3/algebra/curves/params/wnaf/bls12.hpp>
+#include <nil/crypto3/algebra/pairing/bls12.hpp>
+#include <nil/crypto3/algebra/pairing/mnt4.hpp>
+#include <nil/crypto3/algebra/pairing/mnt6.hpp>
 
 #include <nil/crypto3/zk/snark/schemes/ppzksnark/r1cs_gg_ppzksnark.hpp>
-#include <nil/crypto3/zk/snark/schemes/ppzksnark/r1cs_gg_ppzksnark/marshalling.hpp>
-#include <nil/crypto3/zk/snark/algorithms/generate.hpp>
+#include <nil/crypto3/zk/snark/algorithms/verify.hpp>
 
 #include <nil/marshalling/status_type.hpp>
+#include <nil/crypto3/marshalling/types/zk/r1cs_gg_ppzksnark/primary_input.hpp>
+#include <nil/crypto3/marshalling/types/zk/r1cs_gg_ppzksnark/proof.hpp>
+#include <nil/crypto3/marshalling/types/zk/r1cs_gg_ppzksnark/verification_key.hpp>
 
 namespace vm {
 namespace {
@@ -246,7 +251,7 @@ td::RefInt256 generate_randu256(VmState* st) {
     throw VmError{Excno::range_chk, "random seed out of range"};
   }
   unsigned char hash[64];
-  digest::hash_str<digest::SHA512>(hash, seed, 32);
+  ::digest::hash_str<::digest::SHA512>(hash, seed, 32);
   if (!seedv.write().import_bytes(hash, 32, false)) {
     throw VmError{Excno::range_chk, "cannot store new random seed"};
   }
@@ -309,7 +314,7 @@ int exec_set_rand(VmState* st, bool mix) {
     if (!x->export_bytes(buffer + 32, 32, false)) {
       throw VmError{Excno::range_chk, "mixed seed value out of range"};
     }
-    digest::hash_str<digest::SHA256>(hash, buffer, 64);
+    ::digest::hash_str<::digest::SHA256>(hash, buffer, 64);
     if (!x.write().import_bytes(hash, 32, false)) {
       throw VmError{Excno::range_chk, "new random seed value out of range"};
     }
@@ -355,7 +360,7 @@ int exec_compute_hash(VmState* st, int mode) {
   return 0;
 }
 
-namespace {
+namespace detail {
 
   std::vector<unsigned char> obtain_cells_data(td::Ref<vm::DataCell> in_cl) {
     std::vector<unsigned char> byte_blob;
@@ -384,7 +389,72 @@ namespace {
     return byte_blob;
   }
 
-}
+  template <typename SchemeType, typename Endianness>
+  bool verify_byteblob(std::vector<std::uint8_t>::iterator data_begin, std::size_t data_size){
+      using scheme_type = SchemeType;
+      using namespace nil::crypto3::marshalling;
+
+      using verification_key_marshalling_type = types::r1cs_gg_ppzksnark_verification_key<
+          nil::marshalling::field_type<
+              Endianness>,
+          typename scheme_type::verification_key_type>;
+
+      using proof_marshalling_type = types::r1cs_gg_ppzksnark_proof<
+          nil::marshalling::field_type<
+              Endianness>,
+          typename scheme_type::proof_type>;
+
+      using primary_input_marshalling_type = types::r1cs_gg_ppzksnark_primary_input<
+          nil::marshalling::field_type<
+              Endianness>,
+          typename scheme_type::primary_input_type>;
+
+      typename nil::marshalling::status_type processingStatus = nil::marshalling::status_type::success;
+
+      std::vector<std::uint8_t>::iterator read_iter = data_begin;
+
+      proof_marshalling_type val_proof_read1;
+
+      processingStatus = val_proof_read1.read(read_iter, data_size);
+      if (processingStatus != nil::marshalling::status_type::success){
+          return false;
+      }
+
+      typename scheme_type::proof_type
+      de_prf = types::construct_r1cs_gg_ppzksnark_proof<
+        typename scheme_type::proof_type,
+        Endianness>(val_proof_read1);
+
+      primary_input_marshalling_type val_primary_input_read1;
+
+      processingStatus = val_primary_input_read1.read(read_iter, data_size - (read_iter - data_begin));
+      if (processingStatus != nil::marshalling::status_type::success){
+          return false;
+      }
+
+      typename scheme_type::primary_input_type
+      de_pi = types::construct_r1cs_gg_ppzksnark_primary_input<
+        typename scheme_type::primary_input_type,
+        Endianness>(val_primary_input_read1);
+
+      verification_key_marshalling_type val_verification_key_read1;
+
+      processingStatus = val_verification_key_read1.read(read_iter, data_size - (read_iter - data_begin));
+      if (processingStatus != nil::marshalling::status_type::success){
+          return false;
+      }
+
+      typename scheme_type::verification_key_type
+      de_vk = types::construct_r1cs_gg_ppzksnark_verification_key<
+        typename scheme_type::verification_key_type,
+        Endianness>(val_verification_key_read1);
+
+      bool ans = zk::snark::verify<scheme_type> (de_vk, de_pi, de_prf);
+
+      return ans;
+  }
+
+} // namespace detail
 
 template <typename CurveType>
 int exec_verify_groth16(VmState* st) {
@@ -397,24 +467,11 @@ int exec_verify_groth16(VmState* st) {
   Stack& stack = st->get_stack();
   auto proof_cell = stack.pop_cell();
   
-  std::vector<unsigned char> data = obtain_cells_data(td::Ref<vm::DataCell>(proof_cell));
+  std::vector<unsigned char> data = detail::obtain_cells_data(td::Ref<vm::DataCell>(proof_cell));
 
-  typename nil::marshalling::status_type processingStatus = nil::marshalling::status_type::success;
-
-  auto tup = nil::marshalling::verifier_input_deserializer_tvm<scheme_type>::verifier_input_process(
-    data.cbegin(), data.cend(), processingStatus);
-
-  if (processingStatus != nil::marshalling::status_type::success){
-
-      stack.push_bool(false);
-      return 0;
-  }
-
-  typename scheme_type::proof_type de_prf = std::get<2>(tup);
-  typename scheme_type::primary_input_type de_pi = std::get<1>(tup);
-  typename scheme_type::verification_key_type de_vk = std::get<0>(tup);
-
-  stack.push_bool(snark::r1cs_gg_ppzksnark<CurveType>::verify(de_vk, de_pi, de_prf));
+  bool ans = detail::verify_byteblob<scheme_type, 
+    nil::marshalling::option::big_endian>(data.begin(), data.size());
+  stack.push_bool(ans);
   return 0;
 }
 
@@ -429,7 +486,7 @@ int exec_compute_sha256(VmState* st) {
   unsigned char data[128], hash[32];
   CHECK(len <= sizeof(data));
   CHECK(cs->prefetch_bytes(data, len));
-  digest::hash_str<digest::SHA256>(hash, data, len);
+  ::digest::hash_str<::digest::SHA256>(hash, data, len);
   td::RefInt256 res{true};
   CHECK(res.write().import_bytes(hash, 32, false));
   stack.push_int(std::move(res));
@@ -473,14 +530,13 @@ int exec_ed25519_check_signature(VmState* st, bool from_slice) {
 
 void register_ton_crypto_ops(OpcodeTable& cp0) {
   using namespace std::placeholders;
-  using namespace nil::crypto3::algebra;
 
   cp0.insert(OpcodeInstr::mksimple(0xf900, 16, "HASHCU", std::bind(exec_compute_hash, _1, 0)))
       .insert(OpcodeInstr::mksimple(0xf901, 16, "HASHSU", std::bind(exec_compute_hash, _1, 1)))
       .insert(OpcodeInstr::mksimple(0xf902, 16, "SHA256U", exec_compute_sha256))
       .insert(OpcodeInstr::mksimple(0xf910, 16, "CHKSIGNU", std::bind(exec_ed25519_check_signature, _1, false)))
       .insert(OpcodeInstr::mksimple(0xf911, 16, "CHKSIGNS", std::bind(exec_ed25519_check_signature, _1, true)))
-      .insert(OpcodeInstr::mksimple(0xf912, 16, "VERGRTH16", exec_verify_groth16<curves::bls12<381>>));
+      .insert(OpcodeInstr::mksimple(0xf912, 16, "VERGRTH16", exec_verify_groth16<nil::crypto3::algebra::curves::bls12<381>>));
 }
 
 int exec_compute_data_size(VmState* st, int mode) {
