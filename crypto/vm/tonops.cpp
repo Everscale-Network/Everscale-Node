@@ -373,10 +373,10 @@ namespace detail {
 
       const unsigned char* current_reference_data = cl->get_data();
 
-      std::size_t current_data_size = cl->size() / 8;
+      std::size_t current_data_size = cl->size() / CHAR_BIT;
 
       byte_blob.reserve(byte_blob.size() + current_data_size);
-      byte_blob.insert(byte_blob.end(), current_reference_data, 
+      byte_blob.insert(byte_blob.end(), current_reference_data,
         current_reference_data + current_data_size);
 
       unsigned count = cl->size_refs();
@@ -409,43 +409,43 @@ namespace detail {
               Endianness>,
           typename scheme_type::primary_input_type>;
 
-      typename nil::marshalling::status_type processingStatus = nil::marshalling::status_type::success;
+      typename nil::marshalling::status_type ec = nil::marshalling::status_type::success;
 
       std::vector<std::uint8_t>::iterator read_iter = data_begin;
 
       proof_marshalling_type val_proof_read1;
 
-      processingStatus = val_proof_read1.read(read_iter, data_size);
-      if (processingStatus != nil::marshalling::status_type::success){
+      ec = val_proof_read1.read(read_iter, data_size);
+      if (ec != nil::marshalling::status_type::success){
           return false;
       }
 
       typename scheme_type::proof_type
-      de_prf = types::construct_r1cs_gg_ppzksnark_proof<
+      de_prf = types::make_r1cs_gg_ppzksnark_proof<
         typename scheme_type::proof_type,
         Endianness>(val_proof_read1);
 
       primary_input_marshalling_type val_primary_input_read1;
 
-      processingStatus = val_primary_input_read1.read(read_iter, data_size - (read_iter - data_begin));
-      if (processingStatus != nil::marshalling::status_type::success){
+      ec = val_primary_input_read1.read(read_iter, data_size - (read_iter - data_begin));
+      if (ec != nil::marshalling::status_type::success){
           return false;
       }
 
       typename scheme_type::primary_input_type
-      de_pi = types::construct_r1cs_gg_ppzksnark_primary_input<
+      de_pi = types::make_r1cs_gg_ppzksnark_primary_input<
         typename scheme_type::primary_input_type,
         Endianness>(val_primary_input_read1);
 
       verification_key_marshalling_type val_verification_key_read1;
 
-      processingStatus = val_verification_key_read1.read(read_iter, data_size - (read_iter - data_begin));
-      if (processingStatus != nil::marshalling::status_type::success){
+      ec = val_verification_key_read1.read(read_iter, data_size - (read_iter - data_begin));
+      if (ec != nil::marshalling::status_type::success){
           return false;
       }
 
       typename scheme_type::verification_key_type
-      de_vk = types::construct_r1cs_gg_ppzksnark_verification_key<
+      de_vk = types::make_r1cs_gg_ppzksnark_verification_key<
         typename scheme_type::verification_key_type,
         Endianness>(val_verification_key_read1);
 
@@ -466,10 +466,10 @@ int exec_verify_groth16(VmState* st) {
   VM_LOG(st) << "execute VERGRTH16";
   Stack& stack = st->get_stack();
   auto proof_cell = stack.pop_cell();
-  
+
   std::vector<unsigned char> data = detail::obtain_cells_data(td::Ref<vm::DataCell>(proof_cell));
 
-  bool ans = detail::verify_byteblob<scheme_type, 
+  bool ans = detail::verify_byteblob<scheme_type,
     nil::marshalling::option::big_endian>(data.begin(), data.size());
   stack.push_bool(ans);
   return 0;
