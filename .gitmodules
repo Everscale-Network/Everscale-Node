@@ -10,3 +10,33 @@
 [submodule "third-party/rocksdb"]
 	path = third-party/rocksdb
 	url = https://github.com/facebook/rocksdb.git
+[submodule "crypto/algebra"]
+	path = crypto/algebra
+	url = https://github.com/NilFoundation/crypto3-algebra.git
+[submodule "crypto/cipher"]
+	path = crypto/cipher
+	url = https://github.com/NilFoundation/crypto3-block.git
+[submodule "crypto/hash"]
+	path = crypto/hash
+	url = https://github.com/NilFoundation/crypto3-hash.git
+[submodule "crypto/marshalling/algebra"]
+	path = crypto/marshalling/algebra
+	url = https://github.com/NilFoundation/crypto3-algebra-marshalling.git
+[submodule "crypto/marshalling/core"]
+	path = crypto/marshalling/core
+	url = https://github.com/NilFoundation/marshalling.git
+[submodule "crypto/marshalling/multiprecision"]
+	path = crypto/marshalling/multiprecision
+	url = https://github.com/NilFoundation/crypto3-multiprecision-marshalling.git
+[submodule "crypto/marshalling/zk"]
+	path = crypto/marshalling/zk
+	url = https://github.com/NilFoundation/crypto3-zk-marshalling.git
+[submodule "crypto/math"]
+	path = crypto/math
+	url = https://github.com/NilFoundation/crypto3-math.git
+[submodule "crypto/multiprecision"]
+	path = crypto/multiprecision
+	url = https://github.com/nilfoundation/crypto3-multiprecision.git
+[submodule "crypto/zk"]
+	path = crypto/zk
+	url = https://github.com/NilFoundation/crypto3-zk.git
