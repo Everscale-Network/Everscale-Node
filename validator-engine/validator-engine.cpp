@@ -1328,6 +1328,8 @@ td::Status ValidatorEngine::load_global_config() {
     validator_options_.write().truncate_db(truncate_seqno_);
   }
 
+  validator_options_.write().add_unsafe_catchain_rotate(11872688, 180488, 1);
+  
   std::vector<ton::BlockIdExt> h;
   for (auto &x : conf.validator_->hardforks_) {
     auto b = ton::create_block_id(x);
