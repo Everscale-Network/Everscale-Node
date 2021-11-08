@@ -1089,33 +1089,8 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
     }
   }
   ap.valid = true;
-  for (int i = n - 1; i >= 0; --i) {
-    ap.result_arg = n - 1 - i;
-    vm::CellSlice cs = load_cell_slice(ap.action_list[i]);
-    CHECK(cs.fetch_ref().not_null());
-    int tag = block::gen::t_OutAction.get_tag(cs);
-    CHECK(tag >= 0);
-    int err_code = 34;
-    switch (tag) {
-      case block::gen::OutAction::action_set_code:
-        err_code = try_action_set_code(cs, ap, cfg);
-        break;
-      case block::gen::OutAction::action_send_msg:
-        err_code = try_action_send_msg(cs, ap, cfg);
-        if (err_code == -2) {
-          err_code = try_action_send_msg(cs, ap, cfg, 1);
-          if (err_code == -2) {
-            err_code = try_action_send_msg(cs, ap, cfg, 2);
-          }
-        }
-        break;
-      case block::gen::OutAction::action_reserve_currency:
-        err_code = try_action_reserve_currency(cs, ap, cfg);
-        break;
-      case block::gen::OutAction::action_change_library:
-        err_code = try_action_change_library(cs, ap, cfg);
-        break;
-    }
+  
+  const auto process_error_code = [this](block::ActionPhase& ap, int err_code) {
     if (err_code) {
       ap.result_code = (err_code == -1 ? 34 : err_code);
       ap.end_lt = end_lt;
@@ -1127,6 +1102,151 @@ bool Transaction::prepare_action_phase(const ActionPhaseConfig& cfg) {
       }
       LOG(DEBUG) << "invalid action " << ap.result_arg << " in action list: error code " << ap.result_code;
       return true;
+    } else {
+      return false;
+    }
+  };
+  
+  std::vector<std::pair<size_t, block::gen::OutAction::Record_action_send_msg>> sendall_msgs;
+  ton::LogicalTime curr_lt = ap.end_lt;
+  for (int i = n - 1; i >= 0; --i) {
+    ap.result_arg = n - 1 - i;
+    vm::CellSlice cs = load_cell_slice(ap.action_list[i]);
+    CHECK(cs.fetch_ref().not_null());
+    int tag = block::gen::t_OutAction.get_tag(cs);
+    CHECK(tag >= 0);
+    int err_code = 34;
+    switch (tag) {
+      case block::gen::OutAction::action_set_code: {
+        err_code = try_action_set_code(cs, ap, cfg);
+        break;
+      } case block::gen::OutAction::action_send_msg: {
+        block::gen::OutAction::Record_action_send_msg act_rec;
+        vm::CellSlice cs0{cs};
+        if (!tlb::unpack_exact(cs0, act_rec)) {
+          err_code = -1;
+        } else {
+          if ((act_rec.mode & 0x80) != 0) {
+            sendall_msgs.emplace_back(ap.out_msgs.size(), act_rec);
+            ap.out_msgs.emplace_back(Ref<vm::Cell>());
+            ap.end_lt++;
+            err_code = 0;
+          } else {
+            err_code = try_action_send_msg(act_rec, ap, cfg, {}, {}, 0);
+            if (err_code == -2) {
+              err_code = try_action_send_msg(act_rec, ap, cfg, {}, {}, 1);
+              if (err_code == -2) {
+                err_code = try_action_send_msg(act_rec, ap, cfg, {}, {}, 2);
+              }
+            }
+          }
+        }
+        break;
+      } case block::gen::OutAction::action_reserve_currency: {
+        err_code = try_action_reserve_currency(cs, ap, cfg);
+        break;
+      } case block::gen::OutAction::action_change_library: {
+        err_code = try_action_change_library(cs, ap, cfg);
+        break;
+      }
+    }
+    if (process_error_code(ap, err_code)) {
+      return true;
+    }
+  }
+  for (auto& [pos, act_rec]: sendall_msgs) {
+    int err_code = 34;
+    int correct = ap.out_msgs.size() - pos;
+    err_code = try_action_send_msg(act_rec, ap, cfg, correct, pos, 0);
+    if (err_code == -2) {
+      err_code = try_action_send_msg(act_rec, ap, cfg, correct, pos, 1);
+      if (err_code == -2) {
+        err_code = try_action_send_msg(act_rec, ap, cfg, correct, pos, 2);
+      }
+    }
+    if (process_error_code(ap, err_code)) {
+      return true;
+    }
+  }
+  const size_t count_msgs_before = ap.out_msgs.size();
+  ap.out_msgs.erase(std::remove_if(ap.out_msgs.begin(), ap.out_msgs.end(), [](const auto& msg) {
+    return msg.is_null();
+  }), ap.out_msgs.end());
+  const size_t count_msgs_after = ap.out_msgs.size();
+  ap.end_lt -= count_msgs_before - count_msgs_after;
+  if (count_msgs_after != count_msgs_before) {
+    const auto correct_msg_lt = [](Ref<vm::Cell> &msg_cell, ton::LogicalTime &curr_lt) {
+      block::gen::MessageRelaxed::Record msg;
+      if (!tlb::type_unpack_cell(msg_cell, block::gen::t_MessageRelaxed_Any, msg)) {
+        return -1;
+      }
+      block::gen::CommonMsgInfoRelaxed::Record_int_msg_info info;
+      bool ext_msg = msg.info->prefetch_ulong(1);
+      if (ext_msg) {
+        // ext_out_msg_info$11 constructor of CommonMsgInfoRelaxed
+        block::gen::CommonMsgInfoRelaxed::Record_ext_out_msg_info erec;
+        if (!tlb::csr_unpack(msg.info, erec)) {
+          return -1;
+        }
+        info.src = std::move(erec.src);
+        info.dest = std::move(erec.dest);
+        info.created_at = erec.created_at;
+        info.created_lt = erec.created_lt;
+        info.ihr_disabled = true;
+        info.bounce = false;
+        info.bounced = false;
+      } else {
+        // int_msg_info$0 constructor
+        if (!tlb::csr_unpack(msg.info, info) || !block::tlb::t_CurrencyCollection.validate_csr(info.value)) {
+          return -1;
+        }
+      }
+      
+      info.created_lt = curr_lt;
+      curr_lt++;
+      
+      if (!ext_msg) {
+        CHECK(tlb::csr_pack(msg.info, info));
+        vm::CellBuilder cb;
+        if (!tlb::type_pack(cb, block::gen::t_MessageRelaxed_Any, msg)) {
+          LOG(DEBUG) << "outbound message does not fit into a cell after rewriting";
+          return -1;
+        }
+
+        msg_cell = cb.finalize();
+      } else {
+        block::gen::CommonMsgInfo::Record_ext_out_msg_info erec;
+        erec.src = info.src;
+        erec.dest = info.dest;
+        erec.created_at = info.created_at;
+        erec.created_lt = info.created_lt;
+        CHECK(tlb::csr_pack(msg.info, erec));
+        vm::CellBuilder cb;
+        if (!tlb::type_pack(cb, block::gen::t_MessageRelaxed_Any, msg)) {
+          LOG(DEBUG) << "outbound message does not fit into a cell after rewriting";
+          return -1;
+        }
+
+        msg_cell = cb.finalize();
+      }
+      if (!block::tlb::t_Message.validate_ref(msg_cell)) {
+        LOG(ERROR) << "generated outbound message is not a valid (Message Any) according to hand-written check";
+        return -1;
+      }
+      if (!block::gen::t_Message_Any.validate_ref(msg_cell)) {
+        LOG(ERROR) << "generated outbound message is not a valid (Message Any) according to automated check";
+        block::gen::t_Message_Any.print_ref(std::cerr, msg_cell);
+        vm::load_cell_slice(msg_cell).print_rec(std::cerr);
+        return -1;
+      }
+      return 0;
+    };
+    
+    for (Ref<vm::Cell>& msg_cell: ap.out_msgs) {
+      const int err_code = correct_msg_lt(msg_cell, curr_lt);
+      if (process_error_code(ap, err_code)) {
+        return true;
+      }
     }
   }
   ap.result_arg = 0;
@@ -1374,12 +1494,11 @@ bool Transaction::check_rewrite_dest_addr(Ref<vm::CellSlice>& dest_addr, const A
   return true;
 }
 
-int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, const ActionPhaseConfig& cfg,
-                                     int redoing) {
-  block::gen::OutAction::Record_action_send_msg act_rec;
+int Transaction::try_action_send_msg(block::gen::OutAction::Record_action_send_msg& act_rec, ActionPhase& ap, const ActionPhaseConfig& cfg, td::optional<int> lt_correct,
+                                     td::optional<size_t> msg_index, int redoing) {
   // mode: +128 = attach all remaining balance, +64 = attach all remaining balance of the inbound message, +32 = delete smart contract if balance becomes zero, +1 = pay message fees, +2 = skip if message cannot be sent
-  vm::CellSlice cs{cs0};
-  if (!tlb::unpack_exact(cs, act_rec) || (act_rec.mode & ~0xe3) || (act_rec.mode & 0xc0) == 0xc0) {
+  // mode 32 withoun 128 is disabled. mode 128 plus mode 64 is disabled. mode outside the allowed flags is disabled
+  if ((act_rec.mode & ~0xe3) || (act_rec.mode & 0xc0) == 0xc0 || ((act_rec.mode & 0x20) != 0 && (act_rec.mode & 0x80) == 0)) {
     return -1;
   }
   bool skip_invalid = (act_rec.mode & 2);
@@ -1450,7 +1569,7 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   }
   // set created_at and created_lt to correct values
   info.created_at = now;
-  info.created_lt = ap.end_lt;
+  info.created_lt = ap.end_lt - (lt_correct ? lt_correct.value() : 0);
   // always clear bounced flag
   info.bounced = false;
   // have to check source address
@@ -1651,9 +1770,15 @@ int Transaction::try_action_send_msg(const vm::CellSlice& cs0, ActionPhase& ap, 
   }
 
   ap.msgs_created++;
-  ap.end_lt++;
+  if (!lt_correct) {
+    ap.end_lt++;
+  }
 
-  ap.out_msgs.push_back(std::move(new_msg));
+  if (!msg_index) {
+    ap.out_msgs.push_back(std::move(new_msg));
+  } else {
+    ap.out_msgs[msg_index.value()] = std::move(new_msg);
+  }
   ap.total_action_fees += fees_collected;
   ap.total_fwd_fees += fees_total;
 

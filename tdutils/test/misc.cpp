@@ -304,13 +304,7 @@ static void test_to_double() {
 
 TEST(Misc, to_double) {
   test_to_double();
-  const char *locale_name = (std::setlocale(LC_ALL, "fr-FR") == nullptr ? "" : "fr-FR");
-  std::locale new_locale(locale_name);
-  auto host_locale = std::locale::global(new_locale);
-  test_to_double();
-  new_locale = std::locale::global(std::locale::classic());
-  test_to_double();
-  auto classic_locale = std::locale::global(host_locale);
+  std::locale::global(std::locale::classic());
   test_to_double();
 }
 

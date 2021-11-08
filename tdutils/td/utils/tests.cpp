@@ -170,6 +170,10 @@ void TestsRunner::set_regression_tester(unique_ptr<RegressionTester> regression_
   regression_tester_ = std::move(regression_tester);
 }
 
+void TestsRunner::add_arg(string arg) {
+  args_.emplace_back(std::move(arg));
+}
+
 void TestsRunner::set_stress_flag(bool flag) {
   stress_flag_ = flag;
 }
@@ -245,6 +249,10 @@ Status TestsRunner::verify(Slice data) {
     return Status::OK();
   }
   return regression_tester_->verify_test(PSLICE() << name() << "_default", data);
+}
+
+const vector<string>& TestsRunner::args() const {
+  return args_;
 }
 
 }  // namespace td

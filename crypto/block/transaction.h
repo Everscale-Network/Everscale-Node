@@ -29,6 +29,8 @@
 #include "ton/ton-types.h"
 #include "block/block.h"
 #include "block/mc-config.h"
+#include "block/block-auto.h"
+#include "td/utils/optional.h"
 
 namespace block {
 using td::Ref;
@@ -264,6 +266,8 @@ struct Account {
   bool libraries_changed() const;
   bool create_account_block(vm::CellBuilder& cb);  // stores an AccountBlock with all transactions
 
+  bool compute_my_addr(bool force = false);
+  
  protected:
   friend struct Transaction;
   bool set_split_depth(int split_depth);
@@ -276,7 +280,6 @@ struct Account {
   bool unpack_state(vm::CellSlice& cs);
   bool parse_maybe_anycast(vm::CellSlice& cs);
   bool store_maybe_anycast(vm::CellBuilder& cb) const;
-  bool compute_my_addr(bool force = false);
 };
 
 struct Transaction {
@@ -368,7 +371,7 @@ struct Transaction {
   bool prepare_rand_seed(td::BitArray<256>& rand_seed, const ComputePhaseConfig& cfg) const;
   int try_action_set_code(vm::CellSlice& cs, ActionPhase& ap, const ActionPhaseConfig& cfg);
   int try_action_change_library(vm::CellSlice& cs, ActionPhase& ap, const ActionPhaseConfig& cfg);
-  int try_action_send_msg(const vm::CellSlice& cs, ActionPhase& ap, const ActionPhaseConfig& cfg, int redoing = 0);
+  int try_action_send_msg(block::gen::OutAction::Record_action_send_msg& act_rec, ActionPhase& ap, const ActionPhaseConfig& cfg, td::optional<int> lt_correct, td::optional<size_t> msg_index, int redoing);
   int try_action_reserve_currency(vm::CellSlice& cs, ActionPhase& ap, const ActionPhaseConfig& cfg);
   bool check_replace_src_addr(Ref<vm::CellSlice>& src_addr) const;
   bool check_rewrite_dest_addr(Ref<vm::CellSlice>& dest_addr, const ActionPhaseConfig& cfg,

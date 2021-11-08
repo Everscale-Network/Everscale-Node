@@ -100,6 +100,7 @@ class TestContext : public Context<TestContext> {
   virtual ~TestContext() = default;
   virtual Slice name() = 0;
   virtual Status verify(Slice data) = 0;
+  virtual const vector<string>& args() const = 0;
 };
 
 class TestsRunner : public TestContext {
@@ -112,7 +113,8 @@ class TestsRunner : public TestContext {
   void run_all();
   bool run_all_step();
   void set_regression_tester(unique_ptr<RegressionTester> regression_tester);
-
+  void add_arg(string arg);
+  
  private:
   struct State {
     size_t it{0};
@@ -124,11 +126,13 @@ class TestsRunner : public TestContext {
   bool stress_flag_{false};
   vector<string> substr_filters_;
   vector<std::pair<string, unique_ptr<Test>>> tests_;
+  vector<string> args_;
   State state_;
   unique_ptr<RegressionTester> regression_tester_;
 
   Slice name() override;
   Status verify(Slice data) override;
+  const vector<string>& args() const override;
 };
 
 template <class T>
@@ -197,6 +201,8 @@ void assert_true_impl(const T &got, const char *file, int line) {
 
 #define REGRESSION_VERIFY(data) ::td::TestContext::get()->verify(data).ensure()
 
+#define ADDITIONAL_ARGS() ::td::TestContext::get()->args()
+  
 #define TEST_NAME(test_case_name, test_name) \
   TD_CONCAT(Test, TD_CONCAT(_, TD_CONCAT(test_case_name, TD_CONCAT(_, test_name))))
 

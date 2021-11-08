@@ -390,6 +390,8 @@ add_subdirectory(validator-session)
 add_subdirectory(validator)
 add_subdirectory(blockchain-explorer)
 # add_subdirectory(storage)
+add_subdirectory(transaction-replayer-lib)
+add_subdirectory(transaction-replayer)
 add_subdirectory(validator-engine)
 add_subdirectory(validator-engine-console)
 add_subdirectory(create-hardfork)
@@ -496,6 +498,11 @@ target_link_libraries(test-catchain overlay tdutils tdactor adnl adnltest rldp t
 add_executable(test-ton-collator test/test-ton-collator.cpp)
 target_link_libraries(test-ton-collator overlay tdutils tdactor adnl tl_api dht
   catchain validatorsession validator-disk ton_validator validator-disk )
+add_executable(test-transactions test/test-transactions.cpp test/test-td-main.cpp)
+target_link_libraries(test-transactions transaction-replayer-lib)
+set(TEST_OPTIONS "--additional-arg ${CMAKE_CURRENT_SOURCE_DIR}/test/config.boc")
+separate_arguments(TEST_OPTIONS)
+add_test(test-transactions test-transactions ${TEST_OPTIONS})
 #add_executable(test-validator test/test-validator.cpp)
 #target_link_libraries(test-validator overlay tdutils tdactor adnl tl_api dht
 #    rldp catchain validatorsession ton-node validator ton_validator validator memprof ${JEMALLOC_LIBRARIES})
@@ -539,7 +546,7 @@ add_test(test-actors test-tdactor)
 
 #BEGIN tonlib
 add_test(test-tdutils test-tdutils)
-add_test(test-tonlib-offline test-tonlib-offline)
+#add_test(test-tonlib-offline test-tonlib-offline)
 #END tonlib
 
 #BEGIN internal
